@@ -5,6 +5,7 @@ Shiny web app showcasing real-time availability of car parks in Singapore. This 
 <p style="text-align: center;">
 <img src="https://raw.githubusercontent.com/clintonwxy/carparkAvailabilitySG/master/images/image1.png" style="width:300px;">
 </p>
+
 [carparkAvailabilitySG](https://clintonwxy.shinyapps.io/carparkavailabilitysg/) is a real-time web app that showcases the current available carpark lots around Singapore. It is built entirely in *R* and *Shiny*, supported by [datagovsgR](https://cran.r-project.org/web/packages/datagovsgR/index.html), an R package which I had built to pull real time information from the [data.gov.sg](https://data.gov.sg/developer) API. This web application allows the user to search for a particular HDB carpark lot, and obtain information about it. Besides availability, information such as the carpark type, if it has free parking, if it is short-term parking and if it allows for night parking.
 
 ## Work in Progress
