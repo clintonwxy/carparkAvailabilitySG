@@ -14,8 +14,8 @@ Shiny web app showcasing real-time availability of car parks in Singapore. This 
 | Search bar | :heavy_check_mark: | Adding search bar, allowing user to search for a particular carpark |
 | Zoom to search | :heavy_check_mark: | Zoom to search input and show popup |
 | Legend | :heavy_check_mark: | Toggle option to show legend |
-| Refresh | :heavy_check_mark: | Button to pull latest carpark information |
-| Full Info | | Toggle option to show full carpark information |
+| Refresh | | Button to pull latest carpark information, incomplete |
+| Full Info | :heavy_check_mark: | Toggle option to show full carpark information |
 | Nearby | | Upon clicking on one carpark, show availability of the nearest next 3 carparks |
 | Improve UI/UX | | Change from the default Shiny theme |
 
