@@ -6,6 +6,7 @@ library(dplyr)
 library(sf)
 library(leaflet)
 library(htmltools)
+library(waiter)
 
 # Changing strings to to Title Case
 frmt_str = function(x) {
@@ -13,7 +14,7 @@ frmt_str = function(x) {
 }
 
 # HDB Carpark Information
-cp_info = readr::read_csv("hdb-carpark-information.csv") %>%
+cp_info = readr::read_csv("../data/hdb-carpark-information.csv") %>%
   select(id = car_park_no, everything()) %>%
   mutate(address = frmt_str(address),
          car_park_type = frmt_str(car_park_type),
@@ -41,6 +42,14 @@ df = pull_cp_avail()
 # Colour palette for full percentage
 pal = colorNumeric("RdYlGn", domain = df$fill_percentage)
 
+# Loading screen gif
+gif_load = paste0("https://i.kym-cdn.com/photos/images/original/000/516/373/3be.gif")
+loading_screen_bg = tagList(h1("Give Patrick a moment", style = "color:white;"),
+                            img(src = gif_load, height = "350px"))
+
+gif_reload = paste0("https://media.giphy.com/media/TPl5N4Ci49ZQY/giphy.gif")
+reloading_screen_bg = tagList(h1("Give Patrick a moment", style = "color:white;"),
+                              img(src = gif_reload, height = "350px"))
 
 
 ### 2. UI
@@ -51,11 +60,21 @@ ui <- bootstrapPage(
   
   leafletOutput("map", width = "100%", height = "100%"),
   
-  absolutePanel(top = 40, 
-                right = 30,
+  absolutePanel(top = 10, 
+                right = 10,
+                
+                h3("Carpark Availability"),
+                
+                br(),
+                
+                radioButtons(inputId = "fullDataOption",
+                             label = "Information",
+                             choices = c("Basic", "Full")),
+                
+                br(),
                 
                 sliderInput(inputId = "fillPercentage", 
-                            label = "Availability (%)",
+                            label = "Filter by availability (%)",
                             min = 0,
                             max = 100,
                             value = c(0,100),
@@ -79,124 +98,137 @@ ui <- bootstrapPage(
                 
                 actionButton(inputId = "refresh",
                              label = "Refresh"),
-                style = "opacity: 0.9; background: #FFFFFF; padding: 25px",
-                width = "350px"
-                )
+                
+                style = "opacity: 0.8; background: #FFFFFF; padding: 20px",
+                width = "300px"
+  ),
+  
+  use_waiter()
 )
-
-
-
 
 ### 3. Server
 
 server <- function(input, output, session) {
   
-  # Pulling the latest information, as of loading the app 
-  df_latest = pull_cp_avail()
+  loading_screen <- Waiter$new(html = loading_screen_bg,
+                               color = "#192841")
+  loading_screen$show()
+  
+  # Pulling the latest information, as of loading the app
+  df_latest <<- pull_cp_avail()
   
   # Rendering base leaflet map
-   output$map = renderLeaflet({
-     
-     leaflet(df_latest) %>%
-       addProviderTiles(providers$OneMapSG.Night, 
-                        options = providerTileOptions(opacity = 0.7),
-                        group = "Basic Information") %>%
-       addProviderTiles(providers$CartoDB.DarkMatterNoLabels,
-                        options = providerTileOptions(opacity = 0.7),
-                        group = "Basic Information") %>%
-       setView(lat = "1.3521",
-               lng = "103.8198",
-               zoom = 12.5) %>%
-       
-       addCircles(radius = 30,
-                  stroke = TRUE,
-                  fillOpacity = 0.8,
-                  popup = paste0("<b>Address:</b> ", df$address, "<br>",
-                                 "<b>Availability: </b>", df$availability_lots,
-                                 " / ", df$total_lots, "<br>"),
-                  color = ~pal(fill_percentage),
-                  group = "Basic Information")
-   })
-   
-   # Zooming to selected address
-   observe({
-     
-     if (input$carpark_select != "Carparks") {
-       
-       location = df_latest %>% 
-         filter(address == input$carpark_select) %>% 
-         st_coordinates() %>%
-         c()
-       location_info = df_latest %>% 
-         filter(address == input$carpark_select)
-       
-       leafletProxy("map", data = df_latest) %>%
-         flyTo(lat = location[2],
-                 lng = location[1],
-                 zoom = 18) %>%
-         addPopups(lat = location[2],
-                   lng = location[1],
-                   popup = paste0("<b>Address:</b> ", location_info$address, "<br>",
-                                    "<b>Availability: </b>", location_info$availability_lots,
-                                    " / ", location_info$total_lots, "<br>"))
-     }
-   })
-   
-   # Reactive filtered data
-   df_filtered = reactive({
-     df_latest[df_latest$fill_percentage >= input$fillPercentage[1] & 
-                 df_latest$fill_percentage <= input$fillPercentage[2], ]
-   })
-   
-   # Reactive filtered availability
-   observe({
-     leafletProxy("map", data = df_filtered()) %>%
-       clearShapes() %>%
-       addCircles(radius = 30,
-                  stroke = TRUE,
-                  fillOpacity = 0.8,
-                  popup = paste0("<b>Address:</b> ", df$address, "<br>",
-                                 "<b>Availability: </b>", df$availability_lots,
-                                 " / ", df$total_lots, "<br>"),
-                  color = ~pal(fill_percentage),
-                  group = "Basic Information")
-   })
-   
-   
-   # Adding Legend
-   observe({
-     
-     proxy = leafletProxy("map", data = df_latest)
-     proxy %>% clearControls()
-     
-     if (input$legend) {
-       proxy %>% addLegend(position = "bottomright",
-                           pal = pal,
-                           values = ~fill_percentage,
-                           title = "Availability",
-                           labFormat = labelFormat(suffix = "%"),
-                           opacity = 0.9)
-     }
-   })
-   
-   # Reloading with latest data
-   observe({
-     
-     proxy = leafletProxy("map", data = pull_cp_avail())
-     proxy %>% clearControls()
-     
-     if (input$refresh) {
-       proxy %>% addCircles(radius = 30,
-                            stroke = TRUE,
-                            fillOpacity = 0.8,
-                            popup = paste0("<b>Address:</b> ", df$address, "<br>",
-                                           "<b>Availability: </b>", df$availability_lots,
-                                           " / ", df$total_lots, "<br>"),
-                            color = ~pal(fill_percentage),
-                            group = "Basic Information")
-       
-     }
-   })
+  output$map = renderLeaflet({
+    
+    leaflet(df_latest) %>%
+      addProviderTiles(providers$OneMapSG.Grey, 
+                       options = providerTileOptions(opacity = 0.8)) %>%
+      
+      setView(lat = "1.3521",
+              lng = "103.8198",
+              zoom = 12.5)
+  })
+  
+  loading_screen$hide()
+  
+  # Reactive filtered data
+  df_filtered = reactive({
+    df_latest[df_latest$fill_percentage >= input$fillPercentage[1] & 
+                df_latest$fill_percentage <= input$fillPercentage[2], ]
+  })
+  
+  # Options between basic and full information
+  observe({
+    
+    if (input$fullDataOption == "Basic") {
+      
+      leafletProxy("map", data = df_filtered()) %>%
+        clearShapes() %>%
+        addCircles(radius = 30,
+                   stroke = TRUE,
+                   fillOpacity = 0.8,
+                   popup = paste0("<b>Address:</b> ", df_filtered()$address, "<br>",
+                                  "<b>Availability: </b>", df_filtered()$availability_lots,
+                                  " / ", df$total_lots, "<br>"),
+                   color = ~pal(fill_percentage))
+      
+    } else {
+      
+      leafletProxy("map", data = df_filtered()) %>%
+        clearShapes() %>%
+        addCircles(radius = 30,
+                   stroke = TRUE,
+                   fillOpacity = 0.8,
+                   popup = paste0("<b>Address:</b> ", df_filtered()$address, "<br>",
+                                  "<b>Availability: </b>", df_filtered()$availability_lots,
+                                  " / ", df_filtered()$total_lots, "<br>",
+                                  "<b>Carpark Type: </b>", df_filtered()$car_park_type, "<br>",
+                                  "<b>Short Term Parking: </b>", df_filtered()$short_term_parking, "<br>",
+                                  "<b>Free Parking: </b>", df_filtered()$free_parking, "<br>",
+                                  "<b>Night Parking: </b>", df_filtered()$night_parking, "<br>",
+                                  "<b>Last Update: </b>", df_filtered()$last_update),
+                   color = ~pal(fill_percentage))
+    }
+  })
+  
+  # Zooming to selected address
+  observe({
+    
+    if (input$carpark_select != "Carparks") {
+      
+      location = df_latest %>% 
+        filter(address == input$carpark_select) %>% 
+        st_coordinates() %>%
+        c()
+      location_info = df_latest %>% 
+        filter(address == input$carpark_select)
+      
+      leafletProxy("map", data = df_latest) %>%
+        flyTo(lat = location[2],
+              lng = location[1],
+              zoom = 18) %>%
+        addPopups(lat = location[2],
+                  lng = location[1],
+                  popup = paste0("<b>Address:</b> ", location_info$address, "<br>",
+                                 "<b>Availability: </b>", location_info$availability_lots,
+                                 " / ", location_info$total_lots, "<br>"))
+    }
+  })
+  
+  # Adding Legend
+  observe({
+    
+    if (input$legend) {
+      
+      leafletProxy("map", data = df_latest) %>% 
+        addLegend(position = "bottomright",
+                  pal = pal,
+                  values = ~fill_percentage,
+                  title = "Availability",
+                  labFormat = labelFormat(suffix = "%"),
+                  opacity = 0.9)
+    } else {
+      
+      leafletProxy("map", data = df_latest) %>%
+        clearControls()
+      
+    }
+  })
+  
+  # Reloading with latest data
+  observe({
+    
+    if (input$refresh) {
+      
+      reloading_screen = Waiter$new(html = reloading_screen_bg,
+                                    color = "#192841")
+      reloading_screen$show()
+      
+      df_latest <<- pull_cp_avail()
+      
+      reloading_screen$hide()
+    }
+  })
 }
 
 # 4. Run the application 
